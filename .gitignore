@@ -1,0 +1,11 @@
+# Python sanal ortamı
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Üretilen test resimleri ve geçici dosyalar
+*.png
+*.jpg
+*.jpeg
+.streamlit/
