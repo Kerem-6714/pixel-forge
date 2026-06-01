@@ -23,16 +23,16 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- GALERİ HAFIZASI ---
+# --- GALERİ HAFIZASI (SESSION STATE) ---
 if "gorsel_gecmisi" not in st.session_state:
     st.session_state.gorsel_gecmisi = []
 
-# Başlık Bölümü
+# Başlık Bölümü (Hero Section)
 st.title("✨ PixelForge")
 st.caption("Sınırsız, Kredisiz ve Tamamen Yerel Yeni Nesil Yapay Zeka Görsel Üretim Platformu")
 st.markdown("---")
 
-# Stil Havuzu
+# Stil Havuzu (Prompt Sihirbazı)
 STILLER = {
     "🌌 Sinematik (Cinematic)": ", cinematic shot, 8k resolution, dramatic lighting, highly detailed, masterpiece, photorealistic",
     "🎨 Dijital Sanat (Digital Art)": ", digital art, vibrant colors, concept art, trending on artstation, sharp focus",
@@ -41,14 +41,15 @@ STILLER = {
     "🗿 Gerçekçi Heykel/Mermer": ", marble statue, classical sculpture, museum quality, dramatic side lighting"
 }
 
-# Düzen: Sol Panel | Sağ Panel
+# Düzen: Sol Panel (Ayarlar) | Sağ Panel (Üretim ve Galeri)
 with st.sidebar:
     st.image("https://img.icons8.com/nolan/96/artificial-intelligence.png", width=80)
     st.header("Stüdyo Kontrolleri")
     
+    # Stil seçimi
     secilen_stil = st.selectbox("🎭 Görsel Stili", list(STILLER.keys()))
     
-    # --- YENİ BÖLÜM: EN-BOY ORANI SEÇİMİ ---
+    # En-Boy Oranı Seçimi
     st.markdown("---")
     st.markdown("### 📐 Görsel Boyutu")
     boyut_secimi = st.radio(
@@ -66,15 +67,23 @@ with st.sidebar:
         g_piksel, y_piksel = 512, 768
         
     st.markdown("---")
+    # Kalite adımı
     adim_sayisi = st.slider("⚡ Üretim Hızı / Kalitesi", min_value=10, max_value=30, value=20)
     
-    # Yapay Zeka Asistanı
+    # Yapay Zeka Asistanı Düğmesi
     st.markdown("### 🧠 Yapay Zeka Asistanı")
-    prompt_geliştirici_aktif = st.toggle("Promptu Otomatik Geliştir (Magic Enhancer)", value=False)
+    prompt_geliştirici_aktif = st.toggle(
+        "Promptu Otomatik Geliştir (Magic Enhancer)", 
+        value=False,
+        help="Açık olduğunda, bilgisayarınızdaki Llama3 basit kelimelerinizi profesyonel sanat promptlarına dönüştürür."
+    )
     
     st.markdown("---")
     st.markdown("### 🚫 Gelişmiş Filtre")
     negatif_input = st.text_input("Görselde ne olmasın? (Negative Prompt)", placeholder="Örn: sun, red clothes, text")
+    
+    st.markdown("---")
+    st.info("🔓 Token Limiti Yok: Bu platform yerel donanımınızı kullandığı için tamamen ücretsizdir.")
 
 # Ana Üretim Alanı
 sol_kolon, sag_kolon = st.columns([1.2, 1])
@@ -82,10 +91,11 @@ sol_kolon, sag_kolon = st.columns([1.2, 1])
 with sol_kolon:
     st.markdown("### 🧠 Ne Hayal Ediyorsunuz?")
     user_prompt = st.text_area(
-        "Hayal gücünüzü kelimelere dökün:",
+        "Hayal gücünüzü kelimelere dökün (İngilizce daha iyi sonuç verir):",
         placeholder="A majestic neon cyber-punk owl watching over a futuristic Tokyo city...",
         height=120
     )
+    
     uret_butonu = st.button("Sanatı Canlandır 🚀", use_container_width=True)
 
 with sag_kolon:
@@ -95,20 +105,22 @@ with sag_kolon:
         if not user_prompt.strip():
             st.warning("Lütfen bir prompt senaryosu yazın!")
         else:
+            # --- AKILLI STİL VE ASİSTAN AYRIMI ---
             if prompt_geliştirici_aktif:
+                # Asistan aktifse Llama3 kendi stilini üreteceği için hazır stilleri eklemiyoruz
                 glistirilmis_prompt = user_prompt
             else:
+                # Asistan kapalıysa kullanıcının promptu ile arayüzdeki seçili stil birleşiyor
                 glistirilmis_prompt = user_prompt + STILLER[secilen_stil]
             
             with st.spinner("Pikseller yerel yapay zeka tarafından dokunuyor..."):
                 try:
-                    # Payload'a yeni genişlik ve yükseklik değerlerini ekledik
                     payload = {
-                        "prompt": glistirilmis_prompt,
+                        "prompt": glistirilmis_prompt,  # Birleştirilmiş tam promptu gönderiyoruz
                         "negative_prompt": negatif_input,
                         "adim_sayisi": adim_sayisi,
-                        "genislik": g_piksel,   # EKLENDİ
-                        "yukseklik": y_piksel   # EKLENDİ
+                        "genislik": g_piksel,
+                        "yukseklik": y_piksel
                     }
                     
                     backend_url = "http://localhost:8000/v1/generate"
@@ -122,6 +134,7 @@ with sag_kolon:
                         resim_baytlari = response.content
                         gorsel = Image.open(io.BytesIO(resim_baytlari))
                         
+                        # Üretilen resmi galeri hafızasının en başına yerleştiriyoruz
                         st.session_state.gorsel_gecmisi.insert(0, {
                             "resim": gorsel,
                             "prompt": user_prompt,
@@ -140,14 +153,14 @@ with sag_kolon:
                     else:
                         st.error("Motor üretim yaparken bir sorunla karşılaştı.")
                 except Exception as e:
-                    st.error(f"Bağlantı Hatası: {e}")
+                    st.error(f"Bağlantı Hatası: Arka plan motorunun (main.py) açık olduğundan emin olun. Hata: {e}")
     else:
         if st.session_state.gorsel_gecmisi:
             st.image(st.session_state.gorsel_gecmisi[0]["resim"], use_container_width=True, caption="Son Üretilen Görsel")
         else:
             st.info("Sol tarafa prompt girip 'Sanatı Canlandır' butonuna bastığınızda, şaheseriniz burada belirecektir.")
 
-# Galeri Şeridi
+# --- ALT TARAFTAKİ GEÇMİŞ GALERİ ŞERİDİ ---
 if st.session_state.gorsel_gecmisi:
     st.markdown("---")
     st.markdown("### 📸 Bu Oturumdaki Sanatlarınız (Geçmiş Şeridi)")
@@ -161,6 +174,7 @@ if st.session_state.gorsel_gecmisi:
             st.image(veri["resim"], use_container_width=True)
             kisa_prompt = veri["prompt"][:35] + "..." if len(veri["prompt"]) > 35 else veri["prompt"]
             st.caption(f"📝 {kisa_prompt}")
+            
             st.download_button(
                 label="📥 İndir",
                 data=veri["bayt"],
