@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Profesyonel CSS Dokunuşları (Karanlık modern tema ve buton tasarımları)
+# Profesyonel CSS Dokunuşları (Karanlık modern tema, butonlar ve galeri kartları)
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -19,8 +19,15 @@ st.markdown("""
     .stButton>button { background: linear-gradient(45deg, #4f46e5, #06b6d4); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; transition: all 0.3s ease; }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4); }
     h1 { color: #f0f6fc; font-family: 'Inter', sans-serif; font-weight: 800; }
+    /* Galeri kutusu tasarımı */
+    .galeri-kutu { border: 1px solid #30363d; border-radius: 8px; padding: 5px; background-color: #161b22; }
     </style>
 """, unsafe_allow_html=True)
+
+# --- GALERİ HAFIZASI (SESSION STATE) BAŞLATMA ---
+# Tarayıcı sekmesi açık kaldığı sürece üretilen resimleri burada saklayacağız
+if "gorsel_gecmisi" not in st.session_state:
+    st.session_state.gorsel_gecmisi = []  # Boş bir liste olarak başlatıyoruz
 
 # Başlık Bölümü (Hero Section)
 st.title("✨ PixelForge")
@@ -36,7 +43,7 @@ STILLER = {
     "🗿 Gerçekçi Heykel/Mermer": ", marble statue, classical sculpture, museum quality, dramatic side lighting"
 }
 
-# Düzen: Sol Panel (Ayarlar) | Sağ Panel (Üretim ve Galeri)
+# Düzen: Sol Panel (Ayarlar) | Sağ Panel (Üretim ve Ana Ekran)
 with st.sidebar:
     st.image("https://img.icons8.com/nolan/96/artificial-intelligence.png", width=80)
     st.header("Stüdyo Kontrolleri")
@@ -83,14 +90,10 @@ with sag_kolon:
         if not user_prompt.strip():
             st.warning("Lütfen bir prompt senaryosu yazın!")
         else:
-            # --- AKILLI PROMPT KONTROLÜ BURADA BAŞLIYOR ---
-            # Eğer asistan aktifse hazır stilleri ekleme, sadece kullanıcının yazdığını Llama'ya gönder.
-            # Asistan kapalıysa hazır stilleri arkasına ekle.
             if prompt_geliştirici_aktif:
                 glistirilmis_prompt = user_prompt
             else:
                 glistirilmis_prompt = user_prompt + STILLER[secilen_stil]
-            # --- AKILLI PROMPT KONTROLÜ BURADA BİTTİ ---
             
             with st.spinner("Pikseller yerel yapay zeka tarafından dokunuyor..."):
                 try:
@@ -108,15 +111,23 @@ with sag_kolon:
                     )
                     
                     if response.status_code == 200:
-                        resim_baytlari = io.BytesIO(response.content)
-                        gorsel = Image.open(resim_baytlari)
+                        resim_baytlari = response.content
+                        gorsel = Image.open(io.BytesIO(resim_baytlari))
                         
-                        st.image(gorsel, use_container_width=True, caption="LuminaStudio tarafından üretildi.")
+                        # --- YENİ: Üretilen resmi galeri hafızasına (en başa) ekliyoruz ---
+                        st.session_state.gorsel_gecmisi.insert(0, {
+                            "resim": gorsel,
+                            "prompt": user_prompt,
+                            "bayt": resim_baytlari
+                        })
+                        
+                        # En son üretilen resmi ekranda göster
+                        st.image(gorsel, use_container_width=True, caption=f"Son Sonuç: {user_prompt}")
                         
                         st.download_button(
                             label="💾 Ustalık Eserini İndir",
-                            data=response.content,
-                            file_name="lumina_art.png",
+                            data=resim_baytlari,
+                            file_name="pixel_forge_art.png",
                             mime="image/png",
                             use_container_width=True
                         )
@@ -125,4 +136,37 @@ with sag_kolon:
                 except Exception as e:
                     st.error(f"Bağlantı Hatası: Arka plan motorunun (main.py) açık olduğundan emin olun. Hata: {e}")
     else:
-        st.info("Sol tarafa prompt girip 'Sanatı Canlandır' butonuna bastığınızda, şaheseriniz burada belirecektir.")
+        # Eğer henüz yeni resim üretilmediyse ama geçmişte resimler varsa, en sonuncuyu ekranda tut
+        if st.session_state.gorsel_gecmisi:
+            st.image(st.session_state.gorsel_gecmisi[0]["resim"], use_container_width=True, caption="Son Üretilen Görsel")
+        else:
+            st.info("Sol tarafa prompt girip 'Sanatı Canlandır' butonuna bastığınızda, şaheseriniz burada belirecektir.")
+
+# --- YENİ BÖLÜM: ALT TARAFTAKİ PREMIUM GALERİ ŞERİDİ ---
+if st.session_state.gorsel_gecmisi:
+    st.markdown("---")
+    st.markdown("### 📸 Bu Oturumdaki Sanatlarınız (Geçmiş Şeridi)")
+    
+    # Yan yana en fazla 4 adet küçük kart gösterecek şekilde kolonlar oluşturuyoruz
+    # Listeden en fazla son 4 resmi çekiyoruz
+    gosterilecek_adet = min(4, len(st.session_state.gorsel_gecmisi))
+    kolonlar = st.columns(4)
+    
+    for sira in range(gosterilecek_adet):
+        veri = st.session_state.gorsel_gecmisi[sira]
+        with kolonlar[sira]:
+            # Şık bir kutu efekti içinde resmi ve altına kısa promptunu yazıyoruz
+            st.image(veri["resim"], use_container_width=True)
+            # Prompt çok uzunsa kırpıp şık gösterelim
+            kisa_prompt = veri["prompt"][:35] + "..." if len(veri["prompt"]) > 35 else veri["prompt"]
+            st.caption(f"📝 {kisa_prompt}")
+            
+            # Galeri içinden de indirmek isteyenler için küçük bir buton
+            st.download_button(
+                label="📥 İndir",
+                data=veri["bayt"],
+                file_name=f"forge_gallery_{sira}.png",
+                mime="image/png",
+                key=f"galeri_down_{sira}", # Her butonun benzersiz bir anahtarı olmalı
+                use_container_width=True
+            )
