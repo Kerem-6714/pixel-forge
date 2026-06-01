@@ -5,12 +5,12 @@ import torch
 from diffusers import StableDiffusionPipeline
 import io
 import os
-import requests  # Ollama API ile konuşabilmek için ekledik
+import requests
 
 app = FastAPI(
     title="⚡ Premium Resim Motoru", 
     description="Llama3 ve Stable Diffusion destekli gelişmiş yerel motor",
-    version="1.1.0"
+    version="1.2.0"
 )
 
 # --- MODELİ OPTİMİZE HAFIZAYA ALMA ---
@@ -32,13 +32,11 @@ else:
 print("✓ Ultra-optimize model başarıyla yüklendi!")
 
 
-# --- OLLAMA PROMPT GELİŞTİRİCİ FONKSİYONU ---
+# --- OLLAMA PROMPT GELİŞTİRİCİ ---
 def llama_ile_prompt_buyut(basit_prompt: str) -> str:
     try:
         ollama_url = "http://localhost:11434/api/generate"
         
-        # Llama3'e bir yapay zeka sanat yönetmeni gibi davranmasını söylüyoruz
-        # Llama3'ün SD 1.5'e uygun, somut ve abartısız kelimeler üretmesini sağlıyoruz
         sistem_talimati = (
             "You are an expert prompt engineer for Stable Diffusion 1.5. "
             "Expand the user's concept into a concise, concrete description using clear visual keywords, "
@@ -58,16 +56,18 @@ def llama_ile_prompt_buyut(basit_prompt: str) -> str:
             print(f"\n🤖 Llama3 Promptu Geliştirdi: {gelen_metin}\n")
             return gelen_metin.strip()
     except Exception as e:
-        print(f"⚠️ Ollama bağlantı hatası (Sistem normal promptu kullanacak): {e}")
+        print(f"⚠️ Ollama bağlantı hatası: {e}")
     
     return basit_prompt
 
 
-# --- İSTEK ŞABLONU ---
+# --- İSTEK ŞABLONU (Genişlik ve Yükseklik Eklendi) ---
 class ResimIstege(BaseModel):
     prompt: str
     negative_prompt: str = ""
     adim_sayisi: int = 20
+    genislik: int = 512   # Varsayılan Genişlik
+    yukseklik: int = 512  # Varsayılan Yükseklik
 
 
 # --- ENDPOINT (RESİM ÜRETİM NOKTASI) ---
@@ -77,7 +77,6 @@ async def resim_uret(istek: ResimIstege, enhance_prompt: bool = False):
         raise HTTPException(status_code=400, detail="Prompt boş olamaz!")
         
     try:
-        # Eğer kullanıcı arayüzden "Promptu Otomatik Geliştir" seçeneğini açtıysa Llama3'ü devreye sokuyoruz
         isleme_alinacak_prompt = istek.prompt
         if enhance_prompt:
             print(f"🧠 Basit prompt Llama3'e gönderiliyor: '{istek.prompt}'")
@@ -85,17 +84,18 @@ async def resim_uret(istek: ResimIstege, enhance_prompt: bool = False):
         else:
             print(f"🎨 Standart Üretim Başladı: '{istek.prompt}'")
         
-        # Profesyonel çıktılar için varsayılan bir negatif prompt havuzu
         varsayilan_negatif = "blurry, bad anatomy, extra limbs, poorly drawn face, poorly drawn hands, mutation, deformed, blurry, bad proportions, mutilated, cropped, worst quality, low quality"
         tam_negatif = f"{varsayilan_negatif}, {istek.negative_prompt}" if istek.negative_prompt else varsayilan_negatif
 
-        # Üretim esnasında gradyan hesaplamalarını kapatarak VRAM şişmesini önlüyoruz
+        # Üretim esnasında genişlik ve yükseklik değerlerini pipe'a gönderiyoruz
         with torch.inference_mode():
             output = pipe(
                 prompt=isleme_alinacak_prompt, 
                 negative_prompt=tam_negatif,
                 num_inference_steps=istek.adim_sayisi,
-                guidance_scale=7.5
+                guidance_scale=7.5,
+                width=istek.genislik,    # EKLENDİ
+                height=istek.yukseklik   # EKLENDİ
             ).images[0]
         
         buffer = io.BytesIO()
